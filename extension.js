@@ -15,6 +15,10 @@ import {
     DISPLAY_MODE_LEFT,
     DISPLAY_MODE_USED,
 } from './constants.js';
+import {
+    detectEarlyLimitResets,
+    formatLimitResetMessage,
+} from './limitReset.js';
 import {UsageApiClient, UsageApiError} from './usageApi.js';
 
 const PROGRESS_BAR_WIDTH = 360;
@@ -136,18 +140,42 @@ class CodexUsageIndicator extends PanelMenu.Button {
         try {
             const auth = await loadCodexCliAuth();
             const summary = await this._client.fetchSummary(auth.accessToken);
+            const lastUpdated = GLib.DateTime.new_now_local();
+            const limitResets = detectEarlyLimitResets(
+                createLimitResetSnapshot(
+                    this._state.summary,
+                    this._state.auth,
+                    this._state.lastUpdated,
+                ),
+                createLimitResetSnapshot(summary, auth, lastUpdated),
+            );
             this._state = {
                 summary,
                 auth,
-                lastUpdated: GLib.DateTime.new_now_local(),
+                lastUpdated,
                 error: null,
             };
+            this._notifyLimitResets(limitResets);
         } catch (error) {
             this._state = {
                 ...this._state,
                 error: formatRefreshError(error),
             };
             reportError(error, '[codex-usage-indicator] usage refresh failed');
+        }
+    }
+
+    _notifyLimitResets(limitResets) {
+        if (limitResets.length === 0)
+            return;
+
+        try {
+            Main.notify(
+                _('Codex limit reset 🎉'),
+                limitResets.map(formatLimitResetMessage).join('\n'),
+            );
+        } catch (error) {
+            reportError(error, '[codex-usage-indicator] limit reset notification failed');
         }
     }
 
@@ -449,6 +477,28 @@ function formatRefreshError(error) {
         return error.message;
 
     return _('Unknown error');
+}
+
+function createLimitResetSnapshot(summary, auth, observedAt) {
+    return {
+        accountId: getUsageAccountId(summary, auth),
+        observedAt: observedAt?.to_unix?.(),
+        summary,
+    };
+}
+
+function getUsageAccountId(summary, auth) {
+    for (const value of [
+        auth?.accountId,
+        summary?.accountId,
+        summary?.userId,
+        summary?.email,
+    ]) {
+        if (typeof value === 'string' && value.trim())
+            return value.trim();
+    }
+
+    return null;
 }
 
 function formatSummary(summary, displayMode) {

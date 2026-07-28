@@ -7,6 +7,7 @@ GNOME Shell extension for GNOME Shell `50` that shows remaining Codex usage in t
 - Automatically reads the bearer token from the local Codex CLI auth file at `~/.codex/auth.json`
 - Top-bar label showing remaining or used Codex usage
 - Popup with the latest fetch timestamp plus account and Codex model-specific 5-hour and weekly usage progress bars
+- Notification when a limit resets to at least 95% remaining before its scheduled reset
 - Configurable refresh interval
 - Toggle to show `left` or `used` values
 
@@ -50,6 +51,7 @@ Run the usage normalization tests with:
 
 ```bash
 gjs -m tests/usageApi.test.js
+gjs -m tests/limitReset.test.js
 ```
 
 ## Notes
