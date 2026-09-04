@@ -19,6 +19,7 @@ import {
     detectEarlyLimitResets,
     formatLimitResetMessage,
 } from './limitReset.js';
+import {formatResetCreditExpiryList} from './resetCreditExpiry.js';
 import {UsageApiClient, UsageApiError} from './usageApi.js';
 
 const PROGRESS_BAR_WIDTH = 360;
@@ -139,7 +140,7 @@ class CodexUsageIndicator extends PanelMenu.Button {
     async _refreshUsage() {
         try {
             const auth = await loadCodexCliAuth();
-            const summary = await this._client.fetchSummary(auth.accessToken);
+            const summary = await this._client.fetchSummary(auth.accessToken, auth.accountId);
             const lastUpdated = GLib.DateTime.new_now_local();
             const limitResets = detectEarlyLimitResets(
                 createLimitResetSnapshot(
@@ -456,7 +457,7 @@ function formatUsageSummary(state, displayMode) {
 function formatUsageMeta(state) {
     const parts = [];
 
-    const resetExpiryText = formatResetCreditExpiry(state.summary?.rateLimitResetCredits);
+    const resetExpiryText = formatResetCreditExpiryList(state.summary?.rateLimitResetCredits);
     if (resetExpiryText)
         parts.push(resetExpiryText);
 
@@ -571,33 +572,6 @@ function formatResetCredits(rateLimitResetCredits) {
         return '';
 
     return `${formatNumber(availableCount)} ${_('resets available')}`;
-}
-
-function formatResetCreditExpiry(rateLimitResetCredits) {
-    const expiresAt = rateLimitResetCredits?.nextExpiresAt;
-    if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt))
-        return '';
-
-    const formatted = formatMenuDateTime(expiresAt);
-    if (!formatted)
-        return '';
-
-    const availableCount = rateLimitResetCredits?.availableCount;
-    const label = availableCount > 1 ? _('next reset expires') : _('reset expires');
-    return `${label} ${formatted}`;
-}
-
-function formatMenuDateTime(unixSeconds) {
-    const dateTime = GLib.DateTime.new_from_unix_local(Math.round(unixSeconds));
-    const now = GLib.DateTime.new_now_local();
-
-    if (!dateTime)
-        return '';
-
-    if (now && isSameDay(dateTime, now))
-        return dateTime.format('%H:%M');
-
-    return dateTime.format('%b %d, %Y %H:%M');
 }
 
 function getVisibleWindows(summary) {

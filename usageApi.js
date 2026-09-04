@@ -67,16 +67,25 @@ export class UsageApiError extends Error {
 }
 
 export class UsageApiClient {
-    constructor() {
-        this._session = new Soup.Session({
-            timeout: 30,
-        });
+    constructor({apiBaseUrl = API_BASE_URL, proxyResolver = null} = {}) {
+        this._apiBaseUrl = apiBaseUrl.replace(/\/+$/, '');
+        const sessionProperties = {timeout: 30};
+        if (proxyResolver)
+            sessionProperties.proxy_resolver = proxyResolver;
+        this._session = new Soup.Session(sessionProperties);
     }
 
-    async fetchSummary(token) {
+    async fetchSummary(token, accountId = null) {
+        const normalizedAccountId = normalizeAccountId(accountId);
+        const payloadPromise = this._getJson(SUMMARY_ENDPOINT, token, normalizedAccountId);
+        const resetCreditsPromise = normalizedAccountId
+            ? this._fetchResetCredits(token, normalizedAccountId)
+            : payloadPromise.then(payload =>
+                this._fetchResetCredits(token, normalizeAccountId(payload?.account_id))
+            );
         const [payload, resetCreditsPayload] = await Promise.all([
-            this._getJson(SUMMARY_ENDPOINT, token),
-            this._getJson(RATE_LIMIT_RESET_CREDITS_ENDPOINT, token),
+            payloadPromise,
+            resetCreditsPromise,
         ]);
         return normalizeSummary(payload, resetCreditsPayload);
     }
@@ -85,15 +94,29 @@ export class UsageApiClient {
         this._session.abort();
     }
 
-    async _getJson(path, token) {
+    async _fetchResetCredits(token, accountId) {
+        try {
+            return await this._getJson(RATE_LIMIT_RESET_CREDITS_ENDPOINT, token, accountId);
+        } catch (error) {
+            if (error instanceof UsageApiError && error.statusCode === 429)
+                return null;
+
+            throw error;
+        }
+    }
+
+    async _getJson(path, token, accountId = null) {
         const normalizedToken = normalizeBearerToken(token ?? '');
         if (!normalizedToken)
             throw new UsageApiError('A bearer token is required.');
 
-        const message = Soup.Message.new('GET', `${API_BASE_URL}${path}`);
+        const message = Soup.Message.new('GET', `${this._apiBaseUrl}${path}`);
         const headers = message.get_request_headers();
         headers.append('Accept', '*/*');
         headers.append('Authorization', `Bearer ${normalizedToken}`);
+        const normalizedAccountId = normalizeAccountId(accountId);
+        if (normalizedAccountId)
+            headers.append('ChatGPT-Account-Id', normalizedAccountId);
         headers.append('Cache-Control', 'no-cache');
         headers.append('Pragma', 'no-cache');
         headers.append('Referer', path.startsWith('/backend-api/wham/') ? WHAM_REFERER : API_BASE_URL);
@@ -107,7 +130,7 @@ export class UsageApiClient {
             null,
         );
 
-        const statusCode = message.get_status();
+        const statusCode = message.status_code;
         const body = decodeBytes(bytes);
         let payload = null;
 
@@ -820,6 +843,10 @@ function normalizeBearerToken(token) {
         .trim()
         .replace(/^Bearer\s+/i, '')
         .trim();
+}
+
+function normalizeAccountId(accountId) {
+    return typeof accountId === 'string' ? accountId.trim() : '';
 }
 
 function normalizePercent(percent, used, limit) {

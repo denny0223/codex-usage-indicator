@@ -47,11 +47,13 @@ GNOME Shell extension for GNOME Shell `50` that shows remaining Codex usage in t
 
 ## Tests
 
-Run the usage normalization tests with:
+Run the test suite with:
 
 ```bash
 gjs -m tests/usageApi.test.js
+gjs -m tests/usageApiHttp.test.js
 gjs -m tests/limitReset.test.js
+gjs -m tests/resetCreditExpiry.test.js
 ```
 
 ## Notes

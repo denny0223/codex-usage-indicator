@@ -144,7 +144,7 @@ class CodexUsagePreferencesPage extends Adw.PreferencesPage {
 
         try {
             const auth = await loadCodexCliAuth();
-            const summary = await this._client.fetchSummary(auth.accessToken);
+            const summary = await this._client.fetchSummary(auth.accessToken, auth.accountId);
             const displayMode = this._getDisplayMode();
             const value = displayMode === DISPLAY_MODE_USED ? summary.used : summary.left;
             const label = displayMode === DISPLAY_MODE_USED ? _('used') : _('left');
